@@ -125,3 +125,14 @@ Execution failed for task ':app:checkDebugAarMetadata'.
 ```
 **File changed:** `android/app/build.gradle.kts` — `compileSdk = 33` → `36`; replaced the "do not bump" comment.
 **Reason:** sqflite_android needs compileSdk ≥ 36 and 15 AndroidX libs need ≥ 34. The build-file comment ("Pinned… Do not bump without checking TelemetryPlugin.kt") is the misleading one: checked it — TelemetryPlugin.kt imports only `android.os.SystemClock` (API 1), and compileSdk only affects which APIs are visible at compile time, not runtime behaviour (that's targetSdk, left at `flutter.targetSdkVersion`).
+
+### Gate passed  (elapsed: 00:14 — 16:56 → 17:10 IST)
+```
+Running Gradle task 'assembleDebug'...                             47.4s
+✓ Built build/app/outputs/flutter-apk/app-debug.apk
+```
+
+**Left untouched on purpose (looked suspicious, no failing evidence):**
+- `pubspec.yaml` `sdk: ">=3.3.0 <4.0.0"` — analyze/test/build all clean on Dart 3.12.2.
+- `android/gradle.properties` `android.newDsl=false`, `android.builtInKotlin=false` — AGP 9 opt-outs that the Flutter Gradle plugin still relies on; not implicated in any error.
+- `org.gradle.jvmargs=-Xmx8G …` — oversized for a laptop, but not a failure.
