@@ -6,8 +6,7 @@ plugins {
 
 android {
     namespace = "com.example.bridge_broken"
-    // 36 required by sqflite_android and AndroidX (checkDebugAarMetadata).
-    // TelemetryPlugin.kt only uses SystemClock (API 1); compileSdk does not change runtime behaviour.
+    // sqflite_android needs 36
     compileSdk = 36
     ndkVersion = flutter.ndkVersion
 

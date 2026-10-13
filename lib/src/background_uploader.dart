@@ -33,16 +33,13 @@ class BackgroundUploader {
   }
 
   Future<void> _kick() => _spawnWorker((report) {
-        // Worker reports how many it uploaded, or why it could not.
         if (report is! int) debugPrint('[BackgroundUploader] upload failed: $report');
       });
 
-  /// Spawns one upload worker and hands its report (uploaded count, or the
-  /// error text if the upload failed) to [onReport].
+  /// Report is the uploaded count, or the error text.
   Future<void> _spawnWorker(void Function(Object? report) onReport) async {
     final rp = ReceivePort();
-    // A spawned isolate has no platform-channel messenger of its own; it must
-    // be bound with the root isolate's token before any plugin call.
+    // Worker needs the root token to use platform channels.
     _isolate = await Isolate.spawn(
         _worker, <Object?>[rp.sendPort, RootIsolateToken.instance!]);
     rp.listen((msg) {
@@ -84,8 +81,7 @@ class BackgroundUploader {
   }
 }
 
-/// Runs one upload worker exactly as the periodic uploader does and completes
-/// with its report. Test seam only — not exported from `telemetry.dart`.
+/// For tests only (not exported).
 @visibleForTesting
 Future<Object?> debugRunUploadWorkerOnce() {
   final done = Completer<Object?>();

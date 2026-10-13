@@ -60,7 +60,7 @@ class TelemetryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
         sinks.add(events)
         emitter.start { kind, value ->
             val payload = mapOf("kind" to kind, "value" to value)
-            // EventSink must be used on the platform (main) thread; the emitter runs on its own.
+            // EventSink must be called on the main thread
             mainHandler.post { sinks.forEach { it.success(payload) } }
         }
     }
