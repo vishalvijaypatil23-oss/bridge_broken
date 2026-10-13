@@ -8,3 +8,8 @@ ios/Flutter/
 ios/Pods/
 ios/Runner/GeneratedPluginRegistrant.*
 *.db
+
+# IDE / OS files
+.idea/
+*.iml
+.DS_Store
