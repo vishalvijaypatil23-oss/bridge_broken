@@ -157,3 +157,72 @@ E/AndroidRuntime(30994):        at com.example.bridge_broken.SignalEmitter.start
 ```
 **Root cause:** `SignalEmitter` calls `EventSink.success` from its own `Thread`; Flutter requires platform-channel sends on the main thread.
 **Fix:** `TelemetryPlugin.kt` — post the fan-out to `Handler(Looper.getMainLooper())`. The `sinks` list / emitter lifecycle is deliberately left alone here (see TEL-103 / TEL-107).
+
+
+## TEL-101 — periodic upload never happens
+
+**Symptom.** "Upload never happens on Android 13+. No crash, no log, the queue just grows. Works fine if I tap the manual Upload button."
+
+**Hypothesis.** The periodic uploader runs `_worker` in an `Isolate.spawn`ed isolate, and its first call (`Telemetry.flushNativeBuffer()`, then sqflite) is a platform-channel call. A spawned isolate has no binary messenger until `BackgroundIsolateBinaryMessenger.ensureInitialized(RootIsolateToken)` runs, so the call throws, and `catch (_) {}` swallows it → "no crash, no log". The manual button calls `uploadOnce()` on the root isolate, where channels work. (Nothing here is Android-13-specific; that is just where QA looked.)
+
+**Experiment.** Temporary probe in `_worker`'s catch and in `uploadOnce` printing `Isolate.current.debugName`, `RootIsolateToken.instance != null` and the error; ran on a moto g45 5G (Android 15 / API 35):
+```
+adb logcat -c
+adb logcat -v time flutter:I '*:S' | tee build/tel101_logcat.txt
+flutter run -d ZN4222MNTZ
+```
+
+**Observed output.**
+```
+--------- beginning of main
+10-13 17:27:33.441 I/flutter (30994): [IMPORTANT:flutter/shell/platform/android/android_context_vk_impeller.cc(62)] Using the Impeller rendering backend (Vulkan).
+10-13 17:27:33.523 I/flutter (30994): [IMPORTANT:flutter/shell/platform/android/android_context_gl_impeller.cc(104)] Using the Impeller rendering backend (OpenGLES).
+10-13 17:27:33.602 I/flutter (30994): The Dart VM service is listening on http://127.0.0.1:39501/0QG897jeC-M=/
+10-13 17:27:34.658 I/flutter (30994): [TEL-101 probe] _worker isolate=BackgroundUploader._worker isRoot=false error=Bad state: The BackgroundIsolateBinaryMessenger.instance value is invalid until BackgroundIsolateBinaryMessenger.ensureInitialized is executed.
+10-13 17:27:34.658 I/flutter (30994): [TEL-101 probe] _worker done uploaded=0
+```
+The line proving which isolate made the call: `_worker isolate=BackgroundUploader._worker isRoot=false` — the spawned isolate, not the root one.
+
+Red test (`test/tel101_background_upload_test.dart`, commit "test(TEL-101): red"):
+```
+00:00 +4 -1: /Volumes/SWTAirOne/Projects/RIB/bridge_broken/test/tel101_background_upload_test.dart: TEL-101: periodic upload worker can reach platform channels [E]
+  Expected: not contains 'BackgroundIsolateBinaryMessenger'
+    Actual: 'Bad state: The BackgroundIsolateBinaryMessenger.instance value is invalid until BackgroundIsolateBinaryMessenger.ensureInitialized is executed.'
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/tel101_background_upload_test.dart 27:5        main.<fn>
+```
+
+After the fix — test suite:
+```
+00:00 +0: loading /Volumes/SWTAirOne/Projects/RIB/bridge_broken/test/telemetry_test.dart
+00:00 +0: /Volumes/SWTAirOne/Projects/RIB/bridge_broken/test/widget_test.dart: placeholder
+00:00 +1: /Volumes/SWTAirOne/Projects/RIB/bridge_broken/test/telemetry_test.dart: sessionUptimeMs round-trips
+00:00 +2: /Volumes/SWTAirOne/Projects/RIB/bridge_broken/test/telemetry_test.dart: event maps round-trip
+00:00 +3: /Volumes/SWTAirOne/Projects/RIB/bridge_broken/test/telemetry_test.dart: native signals decode
+00:00 +4: /Volumes/SWTAirOne/Projects/RIB/bridge_broken/test/tel101_background_upload_test.dart: TEL-101: periodic upload worker can reach platform channels
+Shell: [ERROR:flutter/runtime/dart_isolate.cc(1402)] Callbacks into the Dart VM are currently prohibited. Either there are outstanding pointers from Dart_TypedDataAcquireData that have not been released with Dart_TypedDataReleaseData, or a finalizer is running.
+00:03 +5: All tests passed!
+```
+(`Callbacks into the Dart VM are currently prohibited` is flutter_tester being unable to answer platform messages from *any* background isolate — reproduced with a standalone probe — so in the unit test a bound isolate gets no reply. The positive path is proven on device.)
+
+After the fix — device (`adb logcat -v time flutter:I AndroidRuntime:E '*:S'`, temporary `worker report=` probe):
+```
+--------- beginning of main
+10-13 17:39:33.990 I/flutter (31302): [IMPORTANT:flutter/shell/platform/android/android_context_vk_impeller.cc(62)] Using the Impeller rendering backend (Vulkan).
+10-13 17:39:34.026 I/flutter (31302): [IMPORTANT:flutter/shell/platform/android/android_context_gl_impeller.cc(104)] Using the Impeller rendering backend (OpenGLES).
+10-13 17:39:34.170 I/flutter (31302): The Dart VM service is listening on http://127.0.0.1:43099/LZwIWtcvdYY=/
+10-13 17:39:41.012 I/flutter (31302): [TEL-101 probe] worker report=0
+10-13 17:40:09.219 I/flutter (31302): [TEL-101 probe] worker report=0
+```
+`report=0` is an int (rows uploaded), not an error string: the worker reached native and SQLite. The 7 s gap from launch matches the 4 s main-thread sleep in `flushNativeBuffer` — that is TEL-102, now reachable.
+
+**Root cause.** `BackgroundUploader._kick` spawns a worker isolate that is never bound to the platform messenger; every plugin call in it fails with `StateError`, which the worker swallowed.
+
+**Fix** (`lib/src/background_uploader.dart`): pass `RootIsolateToken.instance` to the worker and call `BackgroundIsolateBinaryMessenger.ensureInitialized` first; the worker now reports failures back and the spawner logs them (`[BackgroundUploader] upload failed: …`).
+
+**Why the naive fix is wrong.**
+- *Call `uploadOnce()` from the timer on the UI isolate* (it "works") — abandons the off-UI-isolate design and only hides the bug at one call site; any other code spawning a worker hits the same wall.
+- *`Isolate.exit` / `Isolate.run`* — forbidden, and doesn't bind the messenger either; `Isolate.run` with a bound messenger also tripped the "Callbacks into the Dart VM are prohibited" engine error in testing.
+- *Just log in the `catch`* — makes the failure visible but uploads still never happen.
