@@ -136,3 +136,24 @@ Running Gradle task 'assembleDebug'...                             47.4s
 - `pubspec.yaml` `sdk: ">=3.3.0 <4.0.0"` — analyze/test/build all clean on Dart 3.12.2.
 - `android/gradle.properties` `android.newDsl=false`, `android.builtInKotlin=false` — AGP 9 opt-outs that the Flutter Gradle plugin still relies on; not implicated in any error.
 - `org.gradle.jvmargs=-Xmx8G …` — oversized for a laptop, but not a failure.
+
+## Pre-ticket fix — app crashes ~1 s after launch (native signal thread)
+
+Not one of the seven tickets, but it blocks every on-device experiment, so it is fixed first on its own branch (`fix/native-signals-main-thread`).
+
+**Observed** (`flutter run -d ZN4222MNTZ`, moto g45 5G, Android 15 / API 35):
+```
+E/AndroidRuntime(30994): FATAL EXCEPTION: Thread-4
+E/AndroidRuntime(30994): Process: com.example.bridge_broken, PID: 30994
+E/AndroidRuntime(30994): java.lang.RuntimeException: Methods marked with @UiThread must be executed on the main thread. Current thread: Thread-4
+E/AndroidRuntime(30994):        at io.flutter.embedding.engine.FlutterJNI.ensureRunningOnMainThread(FlutterJNI.java:1695)
+E/AndroidRuntime(30994):        at io.flutter.embedding.engine.FlutterJNI.dispatchPlatformMessage(FlutterJNI.java:1177)
+E/AndroidRuntime(30994):        at io.flutter.embedding.engine.dart.DartMessenger.send(DartMessenger.java:275)
+E/AndroidRuntime(30994):        at io.flutter.embedding.engine.dart.DartExecutor$DefaultBinaryMessenger.send(DartExecutor.java:457)
+E/AndroidRuntime(30994):        at io.flutter.embedding.engine.dart.DartExecutor.send(DartExecutor.java:217)
+E/AndroidRuntime(30994):        at io.flutter.plugin.common.EventChannel$IncomingStreamRequestHandler$EventSinkImplementation.success(EventChannel.java:251)
+E/AndroidRuntime(30994):        at com.example.bridge_broken.TelemetryPlugin.onListen$lambda$0(TelemetryPlugin.kt:61)
+E/AndroidRuntime(30994):        at com.example.bridge_broken.SignalEmitter.start$lambda$0(TelemetryPlugin.kt:86)
+```
+**Root cause:** `SignalEmitter` calls `EventSink.success` from its own `Thread`; Flutter requires platform-channel sends on the main thread.
+**Fix:** `TelemetryPlugin.kt` — post the fan-out to `Handler(Looper.getMainLooper())`. The `sinks` list / emitter lifecycle is deliberately left alone here (see TEL-103 / TEL-107).
