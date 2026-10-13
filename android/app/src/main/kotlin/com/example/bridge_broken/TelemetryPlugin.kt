@@ -1,5 +1,7 @@
 package com.example.bridge_broken
 
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
@@ -58,7 +60,8 @@ class TelemetryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
         sinks.add(events)
         emitter.start { kind, value ->
             val payload = mapOf("kind" to kind, "value" to value)
-            sinks.forEach { it.success(payload) }
+            // EventSink must be used on the platform (main) thread; the emitter runs on its own.
+            mainHandler.post { sinks.forEach { it.success(payload) } }
         }
     }
 
@@ -71,6 +74,7 @@ class TelemetryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
         @JvmStatic var cacheDirPath: String = "/data/local/tmp"
         @JvmStatic var compactionBudgetMs: Long = 4000
         @JvmStatic val emitter = SignalEmitter()
+        private val mainHandler = Handler(Looper.getMainLooper())
     }
 }
 
