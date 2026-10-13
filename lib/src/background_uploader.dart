@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:isolate';
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
+import 'package:flutter/services.dart'
+    show BackgroundIsolateBinaryMessenger, RootIsolateToken;
 
 import 'event_store.dart';
 import 'telemetry_channel.dart';
@@ -31,14 +33,18 @@ class BackgroundUploader {
   }
 
   Future<void> _kick() => _spawnWorker((report) {
-        // Worker reports how many it uploaded. Nothing to do with it yet.
+        // Worker reports how many it uploaded, or why it could not.
+        if (report is! int) debugPrint('[BackgroundUploader] upload failed: $report');
       });
 
   /// Spawns one upload worker and hands its report (uploaded count, or the
   /// error text if the upload failed) to [onReport].
   Future<void> _spawnWorker(void Function(Object? report) onReport) async {
     final rp = ReceivePort();
-    _isolate = await Isolate.spawn(_worker, rp.sendPort);
+    // A spawned isolate has no platform-channel messenger of its own; it must
+    // be bound with the root isolate's token before any plugin call.
+    _isolate = await Isolate.spawn(
+        _worker, <Object?>[rp.sendPort, RootIsolateToken.instance!]);
     rp.listen((msg) {
       onReport(msg);
       rp.close();
@@ -46,7 +52,10 @@ class BackgroundUploader {
   }
 
   /// Runs in the spawned isolate.
-  static Future<void> _worker(SendPort reply) async {
+  static Future<void> _worker(List<Object?> args) async {
+    final reply = args[0]! as SendPort;
+    BackgroundIsolateBinaryMessenger.ensureInitialized(
+        args[1]! as RootIsolateToken);
     Object? report = 0;
     try {
       // Pull anything native still has buffered before we read the table,
