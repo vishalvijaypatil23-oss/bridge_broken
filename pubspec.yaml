@@ -1,0 +1,22 @@
+name: bridge_broken
+description: Telemetry module inherited from a contractor. Seven QA tickets open.
+publish_to: none
+version: 2.4.1+241
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  sqflite: ^2.3.3
+  path: ^1.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  sqflite_common_ffi: ^2.3.3
+
+flutter:
+  uses-material-design: true
