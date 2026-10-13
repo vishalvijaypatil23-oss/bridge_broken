@@ -54,3 +54,30 @@ A problem occurred configuring project ':app'.
 ```
 **Files changed:** `android/app/build.gradle.kts` — added `namespace = "com.example.bridge_broken"`; `android/app/src/main/AndroidManifest.xml` — removed legacy `package="com.example.bridge_broken"`.
 **Reason:** AGP 8+ takes the R/BuildConfig namespace only from the build file; value chosen to match the manifest's old `package` and the Kotlin package of `MainActivity.kt`/`TelemetryPlugin.kt`, so no source moves.
+
+### Layer 3 — Java/Kotlin JVM target mismatch (11 vs 17)  (elapsed: 00:12)
+**Error (verbatim, `flutter build apk --debug`):**
+```
+* What went wrong:
+Execution failed for task ':app:compileDebugKotlin'.
+> Inconsistent JVM Target Compatibility Between Java and Kotlin Tasks
+    Inconsistent JVM Target Compatibility Between Java and Kotlin Tasks
+      Inconsistent JVM-target compatibility detected for tasks 'compileDebugJavaWithJavac' (11) and 'compileDebugKotlin' (17).
+```
+**File changed:** `android/app/build.gradle.kts` — `compileOptions` source/targetCompatibility `VERSION_11` → `VERSION_17`.
+**Reason:** Kotlin already targets JVM 17 (`kotlin.compilerOptions.jvmTarget`), and AGP 9 / Flutter 3.44 require 17; raise Java to match rather than drop Kotlin to 11.
+
+Also printed on this run, **not acted on yet** (warning only, not the failure):
+```
+Warning: The plugin sqflite_android requires Android SDK version 36 or higher.
+For more information about build configuration, see https://flutter.dev/to/review-gradle-config.
+Your project is configured to compile against Android SDK 33, but the following plugin(s) require to be compiled against a higher Android SDK version:
+- sqflite_android compiles against Android SDK 36
+Fix this issue by compiling against the highest Android SDK version (they are backward compatible).
+Add the following to /Volumes/SWTAirOne/Projects/RIB/bridge_broken/android/app/build.gradle.kts:
+
+    android {
+        compileSdk = 36
+        ...
+    }
+```
