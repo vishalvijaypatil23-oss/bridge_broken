@@ -81,3 +81,47 @@ Add the following to /Volumes/SWTAirOne/Projects/RIB/bridge_broken/android/app/b
         ...
     }
 ```
+
+### Layer 4 — compileSdk 33 below what dependencies require  (elapsed: 00:13)
+**Error (verbatim, `flutter build apk --debug`):**
+```
+* What went wrong:
+Execution failed for task ':app:checkDebugAarMetadata'.
+> A failure occurred while executing com.android.build.gradle.internal.tasks.CheckAarMetadataWorkAction
+   > 16 issues were found when checking AAR metadata:
+
+       1.  Dependency ':sqflite_android' requires libraries and applications that
+           depend on it to compile against version 36 or later of the
+           Android APIs.
+
+           :app is currently compiled against android-33.
+
+           Recommended action: Update this project to use a newer compileSdk
+           of at least 36, for example 36.
+
+           Note that updating a library or application's compileSdk (which
+           allows newer APIs to be used) can be done separately from updating
+           targetSdk (which opts the app in to new runtime behavior) and
+           minSdk (which determines which devices the app can be installed
+           on).
+
+       2.  Dependency 'androidx.fragment:fragment:1.7.1' requires libraries and applications that
+           depend on it to compile against version 34 or later of the
+           Android APIs.
+
+           :app is currently compiled against android-33.
+
+           Recommended action: Update this project to use a newer compileSdk
+           of at least 34, for example 36.
+
+           Note that updating a library or application's compileSdk (which
+           allows newer APIs to be used) can be done separately from updating
+           targetSdk (which opts the app in to new runtime behavior) and
+           minSdk (which determines which devices the app can be installed
+           on).
+
+
+       [issues 3–16: same message for androidx.window, activity, lifecycle-*, core, core-ktx, annotation-experimental, exifinterface — all require compileSdk ≥ 34; full log in build/07_build.txt]
+```
+**File changed:** `android/app/build.gradle.kts` — `compileSdk = 33` → `36`; replaced the "do not bump" comment.
+**Reason:** sqflite_android needs compileSdk ≥ 36 and 15 AndroidX libs need ≥ 34. The build-file comment ("Pinned… Do not bump without checking TelemetryPlugin.kt") is the misleading one: checked it — TelemetryPlugin.kt imports only `android.os.SystemClock` (API 1), and compileSdk only affects which APIs are visible at compile time, not runtime behaviour (that's targetSdk, left at `flutter.targetSdkVersion`).
