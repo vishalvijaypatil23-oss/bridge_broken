@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:isolate';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 import 'event_store.dart';
 import 'telemetry_channel.dart';
 
@@ -28,18 +30,24 @@ class BackgroundUploader {
     _isolate = null;
   }
 
-  Future<void> _kick() async {
+  Future<void> _kick() => _spawnWorker((report) {
+        // Worker reports how many it uploaded. Nothing to do with it yet.
+      });
+
+  /// Spawns one upload worker and hands its report (uploaded count, or the
+  /// error text if the upload failed) to [onReport].
+  Future<void> _spawnWorker(void Function(Object? report) onReport) async {
     final rp = ReceivePort();
     _isolate = await Isolate.spawn(_worker, rp.sendPort);
     rp.listen((msg) {
-      // Worker reports how many it uploaded. Nothing to do with it yet.
+      onReport(msg);
       rp.close();
     });
   }
 
   /// Runs in the spawned isolate.
   static Future<void> _worker(SendPort reply) async {
-    var uploaded = 0;
+    Object? report = 0;
     try {
       // Pull anything native still has buffered before we read the table,
       // otherwise we upload a stale window.
@@ -49,11 +57,12 @@ class BackgroundUploader {
       // ... network POST elided for the take-home; assume it succeeds ...
       await EventStore.instance
           .markUploaded(rows.map((r) => r['id']! as int).toList());
-      uploaded = rows.length;
-    } catch (_) {
+      report = rows.length;
+    } catch (e) {
       // Uploading is best effort; never let it take the app down.
+      report = e.toString();
     }
-    reply.send(uploaded);
+    reply.send(report);
   }
 
   /// Same work, on the calling isolate. Used by the manual button.
@@ -64,4 +73,13 @@ class BackgroundUploader {
         .markUploaded(rows.map((r) => r['id']! as int).toList());
     return rows.length;
   }
+}
+
+/// Runs one upload worker exactly as the periodic uploader does and completes
+/// with its report. Test seam only — not exported from `telemetry.dart`.
+@visibleForTesting
+Future<Object?> debugRunUploadWorkerOnce() {
+  final done = Completer<Object?>();
+  BackgroundUploader.instance._spawnWorker(done.complete);
+  return done.future;
 }
