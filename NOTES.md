@@ -38,3 +38,19 @@ An exception occurred applying plugin request [id: 'com.android.application']
 ```
 **File changed:** `android/gradle/wrapper/gradle-wrapper.properties` — `gradle-8.4-all.zip` → `gradle-9.1.0-all.zip`
 **Reason:** AGP 9.0.1 (settings.gradle.kts) requires Gradle ≥ 9.1.0; the rest of the toolchain (Kotlin 2.3.20, AGP-9 opt-out flags in gradle.properties) is AGP-9 era, so the wrapper is the outlier — bump Gradle rather than downgrade AGP.
+
+### Layer 2 — No `namespace` (AGP 9 no longer reads manifest `package`)  (elapsed: 00:06)
+**Error (verbatim, `flutter build apk --debug`):**
+```
+* Where:
+Build file '/Volumes/SWTAirOne/Projects/RIB/bridge_broken/android/build.gradle.kts' line: 19
+
+* What went wrong:
+A problem occurred configuring project ':app'.
+> Could not create an instance of type com.android.build.api.variant.impl.ApplicationVariantImpl.
+   > Namespace not specified. Specify a namespace in the module's build file: /Volumes/SWTAirOne/Projects/RIB/bridge_broken/android/app/build.gradle.kts. See https://d.android.com/r/tools/upgrade-assistant/set-namespace for information about setting the namespace.
+
+     If you've specified the package attribute in the source AndroidManifest.xml, you can use the AGP Upgrade Assistant to migrate to the namespace value in the build file. Refer to https://d.android.com/r/tools/upgrade-assistant/agp-upgrade-assistant for general information about using the AGP Upgrade Assistant.
+```
+**Files changed:** `android/app/build.gradle.kts` — added `namespace = "com.example.bridge_broken"`; `android/app/src/main/AndroidManifest.xml` — removed legacy `package="com.example.bridge_broken"`.
+**Reason:** AGP 8+ takes the R/BuildConfig namespace only from the build file; value chosen to match the manifest's old `package` and the Kotlin package of `MainActivity.kt`/`TelemetryPlugin.kt`, so no source moves.

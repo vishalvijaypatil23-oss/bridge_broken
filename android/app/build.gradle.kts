@@ -5,6 +5,7 @@ plugins {
 }
 
 android {
+    namespace = "com.example.bridge_broken"
     // Pinned in 2.3.0 so the Kotlin telemetry plugin would compile against a
     // stable platform. Do not bump without checking TelemetryPlugin.kt.
     compileSdk = 33
