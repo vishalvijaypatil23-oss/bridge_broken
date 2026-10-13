@@ -5,14 +5,15 @@ plugins {
 }
 
 android {
-    // Pinned in 2.3.0 so the Kotlin telemetry plugin would compile against a
-    // stable platform. Do not bump without checking TelemetryPlugin.kt.
-    compileSdk = 33
+    namespace = "com.example.bridge_broken"
+    // 36 required by sqflite_android and AndroidX (checkDebugAarMetadata).
+    // TelemetryPlugin.kt only uses SystemClock (API 1); compileSdk does not change runtime behaviour.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     defaultConfig {
